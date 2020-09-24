@@ -1,33 +1,7 @@
----
-title: "Ito_ImmunoSEQ"
-author: "Mark Long"
-date: "8/27/2019"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-```{r set wd}
-
-# set global options so that graphics devices can be exported
-options(bitmapType='cairo')
-
-# set a mount variable
-if(grepl("/home/mark", getwd())){
-  mount <- "/run/user/1003/gvfs/sftp:host=u2,user=mlong"
-} else {
-  mount <- ""
-}
-
-# Set wd variable
-wd <- "/mnt/lustre/users/mlong/Projects/Ito_ISIM/TCRseq"
-   
-```
 
 
 ```{r load libraries, message=FALSE}
+
 require(ggplot2)
 require(dplyr)
 require(broom)
@@ -37,6 +11,7 @@ require(pheatmap)
 require(RColorBrewer)
 require(vegan)
 require(readxl)
+
 ```
 
   
@@ -103,14 +78,14 @@ library(LymphoSeqDB)
 
 ##  IMPORTING DATA ##
 # Use readImmunoSeq() function to import .tsv files from ImmunoSEQ output
-Sample.list <-  readImmunoSeq(path = paste0(mount, wd, "/Data/samplesMerged"))
+# NOTE - `PATH.TO.TSV` is the path containing immunoSEQ output files (*.tsv)
+
+# Import and adjust .tsv files
+Sample.list <-  readImmunoSeq(path = `PATH.TO.TSV`)
+
 # Adjust names
 names(Sample.list) <- gsub(".tsv", "", list.files(paste0(mount, wd, "/Data/samplesMerged")))
 names(Sample.list) <- gsub("-", ".", names(Sample.list))
-
-# Filter for clones for coverage threshold
-# coverage = 5
-# Sample.list <- lapply(Sample.list, subset, as.numeric(count) >= coverage)
 
 
 
@@ -131,7 +106,8 @@ Sample.aa.list_filter <- lapply(Sample.aa.list, subset, as.numeric(count) >= cov
 
 
 ## GENERATING TABLE OF AA COUNTS ##
-source(paste0(mount, wd, "/Ito_AAsequences.R"))
+# NOTE - source code to generate wide matrix of counts for each clone
+source( "/Ito_AAsequences.R" )
 
 ```
 
@@ -158,8 +134,8 @@ Sample.summary$Group <- factor(Sample.summary$Group, levels = c("NT", "I_1", "I_
 Sample.summary$Replicate <- unlist(lapply(strsplit(as.character(Sample.summary$SampleID), "-", fixed = TRUE), "[", 2))
 # Re-name headers:
 colnames(Sample.summary)[1:4] = c("Sample", "Unique.Rearrangements", "Productive.Rearrangements", "Total.Templates")
-# Save to file
-write.csv(Sample.summary, paste0(mount, wd, "/Results/Sample.summary.csv"))
+
+
 
 # For productive sequences
 Sample.aa.summary <- clonality(file.list = Sample.aa.list)
@@ -182,7 +158,6 @@ ggplot(data = subset(Sample.summary.melt, variable == i), aes(x = TimePoint, y =
    ylab(i) +
    facet_grid(~Group) + 
    theme(text=element_text(size = 20), legend.text=element_text(size = 20))
-ggsave(filename = paste0(mount, wd, "/Figures/OverallMetrics_", i, ".jpeg"), dpi = 300, units = "in", height = 4, width = 10)
 }
 
 
@@ -240,12 +215,6 @@ topSeqsPlot(list = Sample.aa.list_filter, top = 30) +
 
 ## Sample Similarity Measures ##
 
-# To compare the T or B cell repertoires of all samples in a pairwise fashion, use the bhattacharyyaMatrix or  similarityMatrix functions. Both the Bhattacharyya coefficient and similarity score are measures of the amount of overlap between two samples. The value for each ranges from 0 to 1 where 1 indicates the sequence frequencies are identical in the two samples and 0 indicates no shared frequencies. The Bhattacharyya coefficient differs from the similarity score in that it involves weighting each shared sequence in the two distributions by the arithmetic mean of the frequency of each sequence, while calculating the similarity scores involves weighting each shared sequence in the two distributions by the geometric mean of the frequency of each sequence in the two distributions.
-
-
-
-
-
 ## MORISITA INDEX
 # Using pairwisePlot() function for single mouse
 # Using count data frame generated above
@@ -257,12 +226,11 @@ MH <- as.data.frame(as.matrix(MH))
 # Plot
 pairwisePlot(matrix = 1-MH) + 
    ggplot2::scale_fill_gradientn(limits = c(0,1), colors = c("#deebf7", "#4eee94", "#ffc125", "#cd0000")) + 
-   ggplot2::labs(fill = "Similarity score") #+
-   #ggplot2::geom_text(aes(label = round(Score, digits = 2)))
+   ggplot2::labs(fill = "Similarity score")
 
 
 
-# Using count data frame generated above
+# Using count data frame generated from source code `Ito_AAsequences.R`
 MH <- vegdist(t(TotFreqDF.wide), method = "horn")
 # Convert to matrix
 MH <- as.data.frame(as.matrix(MH))
