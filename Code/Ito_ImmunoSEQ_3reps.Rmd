@@ -1,0 +1,823 @@
+---
+title: "Ito_ImmunoSEQ"
+author: "Mark Long"
+date: "8/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r set wd}
+
+# set global options so that graphics devices can be exported
+options(bitmapType='cairo')
+
+# set a mount variable
+if(grepl("/home/mark", getwd())){
+  mount <- "/run/user/1003/gvfs/sftp:host=u2,user=mlong"
+} else {
+  mount <- ""
+}
+
+# Set wd variable
+wd <- "/mnt/lustre/users/mlong/Projects/Ito_ISIM/TCRseq"
+   
+```
+
+
+```{r load libraries, message=FALSE}
+require(ggplot2)
+require(dplyr)
+require(broom)
+require(forcats)
+require(reshape2)
+require(pheatmap)
+require(RColorBrewer)
+require(vegan)
+require(readxl)
+```
+
+  
+  
+# **TCR-seq** #
+  
+# **Method Overview** #
+
+* TCR biology in adaptive immunity
+
+Developing lymphocytes (progenitor) undergo a unique form of genetic recombination in the early stages of T and B cell maturation. This process is called V(D)J recombination, and occurs in the primary lymphoid organs (bone marrow - B cells; thymus - T cells). V(D)J recombination involves a random rearrangement of three separate gene segments; variable (V), joining (J) and diversity (D). The process ultimately results in a final nucleic acid sequence containing one of each V, D, and J segments. The unique VDJ gene produced through this process generates the variable region of both the beta (or heavy in B cells) and alpha (light chain in B cells, contain only V/J segments) chain polypeptides that in combination form a unique receptor protein, called a T or B cell receptor (TCR/BCR). Within the variable region of a TCR reside three complementarity-determining regions (CDRs), which ultimately is where the TCR interacts with its specific antigen. These regions are called the hypervariable regions, as a majority of the sequence variation is found here. The CDR1 and CDR2 are found within the V segment, while the CDR3 includes some of V, and all of D and J regions. CDR3 is the most variable and interacts with the target oligo-peptide lodged in the antigen-binding groove of the HLA molecule of an antigen-presenting cell. Since each TCR is composed of an alpha and beta chain, there are 6 CDR regions per TCR.
+
+The germ line TCR β locus on chromosome 7q34 has two constant, two D, 14 J and 64 V gene segments, which are recombined during T-cell development to yield numerous VDJ recombined T-cell clones; likewise, TCR α locus on chromosome 14q11 has one constant, 61 J and 44 V segments. Further variability and antigen recognition capacity is introduced by nucleotide insertion (NI) in the recombined TCR α and β VDJ sequences. This generates a vast T-cell repertoire, yielding in excess of a trillion potential TCRαβ combinations capable of reacting to non-self (and self) peptides (PMID: 26763333)
+
+Thus, the TCR-alpha and TCR-beta gene products together form a unique protein dimer that ultimately expressed on the cell surface as the TCR. At this point, the progenitor T or B cell is now considered a naive T or B cell, and migrates to the lymph nodes. Each TCR has the capacity to bind to a specific (or range of) antigen(s). Thus, the TCR repertoire, or all unique TCR sequences that exist within an individual at any given time, represents the total capacity of the immune system to recognize self from non-self.  
+
+Antigens for TCR recognition are found on the surfaces of all nucleated cells (via MHC class I) or on specialized antigen-presenting cells (i.e dendritic cells, mononuclear phagocytes) (via MHC clas II). MHC-I antigens originate from peptides found within the cytoplasm of normal cells (so help clear infected cells or tumor cells), and interact with CD8+ cytotoxic T-cells. MHC-II antigens originate from peptides found within extracellular spaces (so help to clear bacterial toxins, infectious pathogens), and interact with CD4+ helper T-cells. Once a T-cell binds a presented antigen/MHC complex, it becomes activated and is stimulated to proliferate.
+
+
+# **ImminoSEQ (Adaptive biotechnologies)**
+
+* Goal: Identifying the TCR repertoire (specifically, the TCR-beta chain CDR3 variable region) in a sample.
+
+* Method: This is accomplished by multiplex PCR using the constant regions of the TCR sequence, followed by subsequent sequencing of libraries to identify unique nucleic acid sequences that act as 'barcodes' for each T-cell clonotype. The PCR amplification strategy has 2 steps - First, multiplex PCR using primers spanning all (?) unique VJ segments. Second, PCR adds barcodes and adapter sequences compatble with Illumina MiSeq/HiSeq platforms. PCR bias has been studied in detail, and primer concentrations adjusted so that the final PCR primer mix results in equal amplification of all possible products prior to sequencing.
+
+
+* Data and analyses tools available through the immunoSEQ ANALYZER: https://clients.adaptivebiotech.com/ (`jianmin.wang@roswellpark.org` / `temp1234`), Project: `RQ-015351_George`
+
+
+
+# **Study Design**
+
+* Project Summary: 
+
+*"Overcoming resistance to PD-1/PD-L1 blockade in non-T cell-inflamed tumors by in situ immune modulation (ISIM) with Flt3L, radiotherapy, and CD40/TLR3 agonists.*
+
+** See `/mnt/lustre/users/mlong/Projects/Ito_ISIM/190822_Meeting For Bioinformatics.pdf` for project overview slides
+
+** PD-1/PD-L1 blockade has revolutionized treatments for various malignancies, but many patients do not respond or develop resistance. Pre-existing immune state is associated with response to PD-1/PD-L1 blockade.
+
+*** Presence of TILs
+*** PD-L1 expression in the tumor microenvironment (TME)
+
+** Flt3 (aka CD135) is an important cytokine receptor in hematopoietic differentiation. Specifically, Flt3 and its cognate ligand Flt3 are critical for the development of lymphoid cells, dendritic cells (DCs) and stem/progenitor cells.
+
+*** Flt3L promotes the development of CD103+ DCs, which have been shown to uniquely transport intact antigens to the tumor draining lymphe node (TdLN) and prime CD8+ T cells. Expansion of this population enhances tumor responses to PD-L1 inhibition (Salmon H et al. Immunity, 2016)
+
+** Radiotherapy activates DCs to promote presentation of tumor antigens to CD8+ T cells
+
+** Anti-CD40 mAb and TLR3 agonist synergistically activate antigen-presenting cells to expand tumor-specific CD8_ T cell responses
+
+
+
+* Hypothesis: 
+** In situ Immunomodulation (ISIM) with Flt2L, radiotherapy and CD40/TLR3 agonists will convert non-T cell inflamed (cold) to inflamed (hot) tumors and render the tumors sensitive to PD-1/PD-L1 blockade.
+** ISIM increases TCR clonality, and cyclic ISIM induces distinct TCR clones to the tumor.
+  
+ 
+* Experimental Design:
+  
+  
+# Exported output from Adaptive Biotechnologies (8/27/19) as .tsv files at /mnt/lustre/users/mlong/Projects/Ito_ISIM/TCRseq/Data
+# If already saved to file, will import compiled list of total productive reads (patient.dataList_TotalProductiveRep)
+
+```{r LymphoSeq: Import Data / Extract sequences}
+
+### To update R to the newest version ##
+# Helpful links
+# https://www.biostars.org/p/88651/
+# https://cloud.r-project.org/bin/linux/ubuntu/README.html
+# If the new version corresponds to the second digit. For instance, you want to update from 3.4 to 3.5:
+# Go to the file: computer/etc/apt/sources.list
+# Other Software
+# Add deb https://cloud.r-project.org/bin/linux/ubuntu xenial-cran35/ <--- change "-cran35" for the current version according to "https://cran.r-project.org/bin/linux/ubuntu/"
+# open the terminal (Ctrl+Alt+t)
+# write on the terminal: sudo apt-get update
+# Enter the password of your PC session
+# write on the terminal: sudo apt-get install r-base
+# Restart the computer
+
+
+## Install LymphoSeq from Bioconductor
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install("LymphoSeq")
+
+## Load LymphoSeq package
+library(LymphoSeq)
+library(LymphoSeqDB)
+
+##  IMPORTING DATA ##
+# Use readImmunoSeq() function to import .tsv files from ImmunoSEQ output
+Sample.list <-  readImmunoSeq(path = paste0(mount, wd, "/Data/samplesMerged"))
+# Adjust names
+names(Sample.list) <- gsub(".tsv", "", list.files(paste0(mount, wd, "/Data/samplesMerged")))
+names(Sample.list) <- gsub("-", ".", names(Sample.list))
+
+# Filter for clones for coverage threshold
+# coverage = 5
+# Sample.list <- lapply(Sample.list, subset, as.numeric(count) >= coverage)
+
+
+
+##  EXTRACTING PRODUCTIVE SEQUENCES ##
+# Aggregate productive counts by nucleotide
+Sample.nt.list <- productiveSeq(file.list = Sample.list, aggregate = "nucleotide", prevalence = FALSE)
+# Filter for clones for coverage threshold
+coverage = 5
+Sample.nt.list_filter <- lapply(Sample.nt.list, subset, as.numeric(count) >= coverage)
+
+
+# Aggregate productve counts by amino acid
+Sample.aa.list <- productiveSeq(file.list = Sample.list, aggregate = "aminoAcid", prevalence = TRUE)
+# Filter for clones for coverage threshold
+coverage = 5
+Sample.aa.list_filter <- lapply(Sample.aa.list, subset, as.numeric(count) >= coverage)
+
+
+
+## GENERATING TABLE OF AA COUNTS ##
+source(paste0(mount, wd, "/Ito_AAsequences.R"))
+
+```
+
+
+
+
+
+```{r LymphoSeq: summary stats}
+
+
+## Generate table of summary statistics (i.e. number of sequences, number of productive sequences, entropy, clonality, Gini coefficient, frequency of top productive sequences)
+# For all sequences
+Sample.summary <- clonality(file.list = Sample.list)
+Sample.summary <- Sample.summary[order(Sample.summary$samples) ,]
+# Add sample/time variables
+Sample.summary$SampleID <- factor(rep(c("I_1-1", "I_1-2", "I_1-3", "I_1F-1", "I_1F-2", "I_2-1", "I_2-2", "I_2-3", "NT-1", "NT-2", "NT-3"), each = 3), levels = c("NT-1", "NT-2", "NT-3", "I_1-1", "I_1-2", "I_1-3",  "I_2-1", "I_2-2", "I_2-3", "I_1F-1", "I_1F-2"))
+#
+Sample.summary$TimePoint <- rep(c("1", "2", "3"), times = 11)
+#
+library(stringr)
+Sample.summary$Group <- str_extract(Sample.summary$SampleID, pattern = "^.*-")
+Sample.summary$Group <- gsub("-", "", Sample.summary$Group)
+Sample.summary$Group <- factor(Sample.summary$Group, levels = c("NT", "I_1", "I_2", "I_1F"))
+#
+Sample.summary$Replicate <- unlist(lapply(strsplit(as.character(Sample.summary$SampleID), "-", fixed = TRUE), "[", 2))
+# Re-name headers:
+colnames(Sample.summary)[1:4] = c("Sample", "Unique.Rearrangements", "Productive.Rearrangements", "Total.Templates")
+# Save to file
+write.csv(Sample.summary, paste0(mount, wd, "/Results/Sample.summary.csv"))
+
+# For productive sequences
+Sample.aa.summary <- clonality(file.list = Sample.aa.list)
+# Sort by sample id
+Sample.aa.summary <- Sample.aa.summary[order(Sample.aa.summary$samples) ,]
+# Add sample/time variables
+Sample.aa.summary$SampleID <- factor(rep(c("I_1-1", "I_1-2", "I_1-3", "I_1F-1", "I_1F-2", "I_2-1", "I_2-2", "I_2-3", "NT-1", "NT-2", "NT-3"), each = 3), levels = c("NT-1", "NT-2", "NT-3", "I_1-1", "I_1-2", "I_1-3",  "I_2-1", "I_2-2", "I_2-3", "I_1F-1", "I_1F-2"))
+Sample.aa.summary$TimePoint <- rep(c("1", "2", "3"), times = 11)
+
+
+## Generate Overall Metrics Plots ##
+Sample.summary.melt <- melt(Sample.summary)
+#
+for(i in unique(Sample.summary.melt$variable)){
+# Plot clonality
+ggplot(data = subset(Sample.summary.melt, variable == i), aes(x = TimePoint, y = value, fill = Group, color = Group)) +
+   geom_line(aes(group = Replicate), color = "black", alpha = 0.1) +
+   geom_point() + 
+   geom_boxplot(alpha = 0.2) +
+   ylab(i) +
+   facet_grid(~Group) + 
+   theme(text=element_text(size = 20), legend.text=element_text(size = 20))
+ggsave(filename = paste0(mount, wd, "/Figures/OverallMetrics_", i, ".jpeg"), dpi = 300, units = "in", height = 4, width = 10)
+}
+
+
+```
+
+
+```{r repertoire similarity / diversity}
+
+## Calculate 'Clonal Relatedness'
+# Clonal relatedness is a useful metric that takes into account sequence similarity without regard for clonal frequency. It is defined as the proportion of nucleotide sequences that are related by a defined edit distance threshold. The value ranges from 0 to 1 where 0 indicates no sequences are related and 1 indicates all sequences are related. Edit distance is a way of quantifying how dissimilar two sequences are to one another by counting the minimum number of operations required to transform one sequence into the other. For example, an edit distance of 0 means the sequences are identical and an edit distance of 1 indicates that the sequences different by a single amino acid or nucleotide.
+Sample.ClonalRelatedness <- clonalRelatedness(list = Sample.list, editDistance = 10)
+Sample.productive.ClonalRelatedness <- clonalRelatedness(list = Sample.nt.list, editDistance = 10)
+
+
+## Generate phylogenetic tree
+#phyloTree(list = Sample.nt.list, sample = "Germ1", type = "nucleotide", 
+#          layout = "rectangular")
+
+
+## Perform Multiple Sequence Alignment
+# In LymphoSeq, you can perform a multiple sequence alignment using one of three methods provided by the Bioconductor msa package (ClustalW, ClustalOmega, or Muscle) and output results to the console or as a pdf file. One may perform the alignment of all amino acid or nucleotide sequences in a single sample. Alternatively, one may search for a given sequence within a list of samples using an edit distance threshold.
+# if output = "pdf", will save to figure in working directory (so, must set this first)
+setwd(paste0(mount, wd, "/Figures"))
+alignSeq(list = Sample.aa.list, sample = "Tumor", type = "aminoAcid", 
+         method = "ClustalW", output = "console")
+setwd("/home/mark")
+
+## Search for a sequence across samples using searchSeq() function
+# Can use the editDistance argument to search for similar sequences
+searchSeq(list = Sample.aa.list, sequence = "CASTPNYSNQPQHF", type = "aminoAcid", 
+          match = "global", editDistance = 0)
+searchSeq(list = Sample.aa.list, sequence = "CASSLDSYNEQFF", type = "aminoAcid", 
+          match = "global", editDistance = 0)
+
+
+## Search for sequences with known antigen specificity
+published <- searchPublished(list = Sample.aa.list)
+#write.table(published, file = paste0(mount, wd, "/Results/CuratedAntigenicity.txt"))
+
+
+
+
+
+## VISUALIZING REPERTOIRE DIVERSITY ##
+
+## Lorenz curve
+# Antigen receptor repertoire diversity can be characterized by a number such as clonality or Gini coefficient calculated by the  clonality function. Alternatively, you can visualize the repertoire diversity by plotting the Lorenz curve for each sample as defined above. In this plot, the more diverse samples will appear near the dotted diagonal line (the line of equality) whereas the more clonal samples will appear to have a more bowed shape.
+# For a single sample:
+jpeg(filename = paste0(mount, wd, "/Figures/LymphoSeq_LorenzCurve_ProductiveAA_NT-3.jpeg"), res = 300, width = 5, height = 5, units = "in")
+lorenzCurve(samples = names(Sample.aa.list)[31:33], list = Sample.aa.list[31:33])
+dev.off()
+# For all samples:
+jpeg(filename = paste0(mount, wd, "/Figures/LymphoSeq_LorenzCurve_ProductiveAA_ALL.jpeg"), res = 300, width = 5, height = 5, units = "in")
+lorenzCurve(samples = names(Sample.aa.list), list = Sample.aa.list)
+dev.off()
+
+## Top sequences
+# you can get a feel for the repertoire diversity by plotting the cumulative frequency of a selected number of the top most frequent clones using the function topSeqsPlot. In this case, each of the top sequences are represented by a different color and all less frequent clones will be assigned a single color (violet).
+jpeg(filename = paste0(mount, wd, "/Figures/LymphoSeq_TopSeqs_ProductiveAA.jpeg"), res = 300, width = 10, height = 4, units = "in")
+# Display the number of sequences at the top of bar plot and add a title
+n <- as.character(lapply(Sample.aa.list_filter, nrow))
+topSeqsPlot(list = Sample.aa.list_filter, top = 30) + 
+   ggplot2::annotate("text", x = 1:length(Sample.aa.list_filter), y = 105, label = n, color = "black") +
+   ggplot2::expand_limits(y = c(0, 110)) + ggplot2::ggtitle("Top 10 Clones") + 
+   ggplot2::scale_x_discrete(limits = names(Sample.aa.list_filter)) +
+   ggplot2::theme(axis.title=element_text(size = 25), axis.text.x=element_text(size = 25), axis.text.y=element_text(size = 15))
+dev.off()
+
+# Pull top 10 aa sequences for each sample
+head(Sample.aa.list_filter$Germ1, n = 10)
+head(Sample.aa.list_filter$Germ2, n = 10)
+head(Sample.aa.list_filter$Tumor, n = 10)
+
+Sample.aa.list_filter$Germ1$aminoAcid[1:10]
+Sample.aa.list_filter$Germ2$aminoAcid[1:10]
+Sample.aa.list_filter$Tumor$aminoAcid[1:10]
+
+
+
+
+
+
+## Sample Similarity Measures ##
+
+# To compare the T or B cell repertoires of all samples in a pairwise fashion, use the bhattacharyyaMatrix or  similarityMatrix functions. Both the Bhattacharyya coefficient and similarity score are measures of the amount of overlap between two samples. The value for each ranges from 0 to 1 where 1 indicates the sequence frequencies are identical in the two samples and 0 indicates no shared frequencies. The Bhattacharyya coefficient differs from the similarity score in that it involves weighting each shared sequence in the two distributions by the arithmetic mean of the frequency of each sequence, while calculating the similarity scores involves weighting each shared sequence in the two distributions by the geometric mean of the frequency of each sequence in the two distributions.
+
+# Check similarity of samples
+similarity.matrix <- similarityMatrix(productive.seqs = Sample.nt.list)
+similarity.matrix
+# Plot similarity
+#jpeg(filename = paste0(mount, wd, "/Figures/LymphoSeq_SimilarityMatrix_ProductiveAA.jpeg"), res = 300, width = 5, height = 5, units = "in")
+pairwisePlot(matrix = similarity.matrix)
+#dev.off()
+
+bhattacharyya.matrix <- bhattacharyyaMatrix(productive.seqs = Sample.aa.list[1:3])
+bhattacharyya.matrix
+# Plot similarity
+#jpeg(filename = paste0(mount, wd, "/Figures/LymphoSeq_BhattacharyyaMatrix_ProductiveAA.jpeg"), res = 300, width = 5, height = 5, units = "in")
+pairwisePlot(matrix = bhattacharyya.matrix)
+#dev.off()
+
+
+
+## MORISITA INDEX
+# Using pairwisePlot() function for single mouse
+# Using count data frame generated above
+# sample
+sample <- "NT.3"
+MH <- vegdist(t(TotFreqDF.wide[, grep(sample, colnames(TotFreqDF.wide))]), method = "horn")
+# Convert to matrix
+MH <- as.data.frame(as.matrix(MH))
+jpeg(filename = paste0(mount, wd, "/Figures/MH_ProductiveAA_", sample, "_NoText.jpeg"), res = 300, width = 4, height = 3, units = "in")
+pairwisePlot(matrix = 1-MH) + 
+   ggplot2::scale_fill_gradientn(limits = c(0,1), colors = c("#deebf7", "#4eee94", "#ffc125", "#cd0000")) + 
+   ggplot2::labs(fill = "Similarity score") #+
+   #ggplot2::geom_text(aes(label = round(Score, digits = 2)))
+dev.off()
+
+
+# Using count data frame generated above
+MH <- vegdist(t(TotFreqDF.wide), method = "horn")
+# Convert to matrix
+MH <- as.data.frame(as.matrix(MH))
+# Add color annotations
+Group <- ifelse(grepl("^NT", colnames(MH)), "NT", "I")
+Sample <- ifelse(grepl("\\.1$", colnames(MH)), "1",
+                 ifelse(grepl("\\.2$", colnames(MH)), "2", "3"))
+ann.cols <- data.frame("Group" = Group, "Sample" = Sample)
+rownames(ann.cols) = colnames(MH)
+# Set annotation colors
+ann.colors <- list("Group" = c("I" = "blue", "NT" = "grey30"),
+                   "Sample" = c("1" = "#FFB6C1", "2" = "red", "3" = "darkred"))
+# Heatmap of MH similarity index
+require(pheatmap)
+require(RColorBrewer)
+colors <- colorRampPalette(rev(brewer.pal(9, "Reds")) )(255)
+labels <- labels
+#jpeg(filename =paste0(mount, wd, "/Figures/DistanceMatrix_MHIndex.jpeg"), res = 300, units = "in", height = 5, width = 5)
+pheatmap(MH,
+         annotation_names_row = FALSE,
+         annotation_names_col = FALSE,
+         annotation_colors = ann.colors,
+         #annotation_row = ann_rows,
+         annotation_col = ann.cols,
+         clustering_distance_cols = "correlation", clustering_method = "complete",
+         show_rownames = TRUE,
+         show_colnames = TRUE,
+         border_color = "NA",
+         col=colors)
+#dev.off()
+
+
+
+
+
+# Check overlap between samples (only works for 2 or 3 samples)
+commonSeqsVenn(samples = c("NT-2-1", "NT-2-2", "NT-2-3"), 
+               productive.seqs = Sample.aa.list_filter)
+# OR draw venn manually
+# Plot venn diagrams
+source(paste0(mount, "/mnt/lustre/users/mlong/Projects/Qianqian_TCGAOV_RNAseq/Libraries/vennDiagrams.R"))
+
+#jpeg(file = paste0(mount, wd, "/Figures/VennDiagram_AbundanctClones_0.1Freq.jpeg"), height = 6, width = 6, units = "in", res = 300)
+draw.venn(set1 = rownames(TotFreqDF.wide)[TotFreqDF.wide$'NT-1-1' > 0.00000001], 
+          set2 = rownames(TotFreqDF.wide)[TotFreqDF.wide$'NT-1-2' > 0.00000001], 
+          set3 = rownames(TotFreqDF.wide)[TotFreqDF.wide$'NT-1-3' > 0.00000001], 
+          groups = c("NT-1-1", "NT-1-2", "NT-1-3"))
+#dev.off()
+
+# Pull common clones across samples
+common_intersect <- intersect(rownames(TotFreqDF.wide)[TotFreqDF.wide$Germ1 > 0.01], intersect(rownames(TotFreqDF.wide)[TotFreqDF.wide$Germ2 > 0.01],  rownames(TotFreqDF.wide)[TotFreqDF.wide$Tumor > 0.01]))
+
+
+
+
+# Plot frequencies between two samples as a scatter plot
+commonSeqsPlot(names(Sample.aa.list)[1], names(Sample.aa.list)[3], 
+               productive.aa = Sample.aa.list, 
+               show = "all")
+# change scale to log10
+# This will call data/plot
+scatter_G1G2 <- commonSeqsPlot(names(Sample.aa.list)[1], names(Sample.aa.list)[2], 
+   productive.aa = Sample.aa.list) 
+# Add 0.0001 to each value
+#scatter_G1G2$data$Germ1 <- scatter_G1G2$data$Germ1 + 0.0001
+#scatter_G1G2$data$Germ2 <- scatter_G1G2$data$Germ2 + 0.0001
+# use ggplot2 to refine plot
+scatter_G1G2 +
+   ggplot2::geom_curve(aes(x=0.01, y=0.001, xend = 0.001, yend = 0.01, show.legend = FALSE)) +
+   #ggplot2::scale_x_log10() + 
+   #ggplot2::scale_y_log10() + 
+   ggplot2::annotation_logticks(sides = "bl") +
+   coord_trans(x = "log10", y = "log10") 
+
+
+# Plot overlap of intersecting sequences across multiple samples
+commonSeqsBar(productive.aa = Sample.aa.list, 
+              samples = names(Sample.aa.list), 
+              labels = "no")
+
+
+
+```
+
+```{r track clones}
+
+## Finding recurring sequences
+# To create a data frame of unique, productive amino acid sequences as rows and sample names as headers use the seqMatrix function. Each value in the data frame represents the frequency that each sequence appears in the sample. You can specify your own list of sequences or all unique sequences in the list using the output of the function uniqueSeqs. The uniqueSeqs function creates a data frame of all unique, productive sequences and reports the total count in all samples.
+#
+unique.seqs <- uniqueSeqs(productive.aa = Sample.aa.list_filter[c(1:2)])
+head(unique.seqs)
+#
+sequence.matrix <- seqMatrix(productive.aa = Sample.aa.list_filter[c(1:2)], sequences = unique.seqs$aminoAcid)
+head(sequence.matrix)
+
+
+# Track Clone frequencies across samples
+CT <- cloneTrack(sequence.matrix = sequence.matrix, 
+           productive.aa = Sample.aa.list_filter[c(1:2)], 
+           map = c("Germ1", "Germ2"), 
+           #label = c("Germ1", "Germ2"), 
+           track = common_intersect, 
+           unassigned = FALSE)
+
+CT + ggplot2::scale_x_discrete(expand = c(0,0), labels = c("Germ1", "Germ2")) + 
+   ggplot2::scale_y_log10() + ggplot2::annotation_logticks(sides = "l") + 
+   ggplot2::ggtitle("")
+
+```
+
+
+```{r manual scatterplot}
+
+# Import differential abundance 
+# Calculated with immunoSEQ ANALYZER software, Differential Abundance Tool (or Scatterplot with Annotation tool, which maps a third sample to output):
+# This tool compares two samples and identifies rearrangements (unique sequences) that have significantly increased or decreased in frequency between the two samples. This analysis is useful to identify rearrangements that are enriched in a sorted vs. unsorted cell population, or rearrangements that expanded between two time points (pre-stimulation and post-stimulation). The methodology presented here was prototyped in a study of yellow fever vaccination, where subjects were immunosequenced before vaccination and two weeks after vaccination(Set Parameters: method = binomial or method = fisher).1 An extension of this methodology was built for comparisons of human peripheral samples, where normal repertoire changes in healthy adults over time are accounted for in the detection process of clonal expansion (Set Parameters: method = betabinomial).2 Using the betabinomial method effectively increases the stringency for determining if rearrangements have significantly changed in frequency between two samples and decreases the number of clones identified.. 
+
+#Reference: 1. DeWitt WS, Emerson RO, et al. Dynamics of the cytotoxic T cell response to a model of acute viral infection. J Virol. 2015 Apr;89(8):4517-26. 2. Rytlewski J, Deng S, et al. Model to improve specificity for identification of clinically-relevant expanded T cells in peripheral blood. PLOS ONE. 2019 Mar;14(3):e0213684. 
+
+#Restrictions: Samples with Counting Method v1 are not supported by this tool. We are making this early access tool available to the community with the caveat that functionality or analytical application may be unpredictable or inappropriate on certain sample types and assay versions.  This is an advanced analysis tool; if you have methodological questions related to its use with your data, please review the Reference listed above. If additional support is required, please contact our Technical Support team.
+# Set samples for plot
+sample1 = "I_1F.1.1"
+sample2 = "I_1F.1.2"
+# Call differential abundance (as determined by differentialAbundance() function)
+DiffAbund <- get(paste0(sample1, "_", sample2))
+# 
+#DiffAbund$padj <- p.adjust(DiffAbund$pValue, method = "fdr")
+
+# Subset for sample data
+TotFreqDF.wide_S1S2 <- subset(TotFreqDF.wide, TotFreqDF.wide[, sample1] > 0 | TotFreqDF.wide[, sample2] > 0)
+# Add groupings for color scheme
+TotFreqDF.wide_S1S2$Diff <- ifelse(rownames(TotFreqDF.wide_S1S2) %in% DiffAbund$aminoAcid[DiffAbund$q < 0.05 & DiffAbund$l2fc > 0], "Loss",
+                             ifelse(rownames(TotFreqDF.wide_S1S2) %in% DiffAbund$aminoAcid[DiffAbund$q < 0.05 & DiffAbund$l2fc < 0], "Gain",      
+                               ifelse(rownames(TotFreqDF.wide_S1S2) %in% DiffAbund$aminoAcid & TotFreqDF.wide_S1S2[, sample1] > as.numeric(names(table(TotFreqDF.wide[, sample1])[6])) | TotFreqDF.wide_S1S2[, sample2] > as.numeric(names(table(TotFreqDF.wide[, sample2])[6])), "Not Significant", "Excluded")))
+# adjust factor levels for plot
+TotFreqDF.wide_S1S2$Diff <- factor(TotFreqDF.wide_S1S2$Diff, levels = c("Loss", "Gain", "Not Significant", "Excluded"))
+
+# Check nuber of DECs
+table(TotFreqDF.wide_S1S2$Diff)
+   
+## PLOT
+jpeg(filename = paste0(mount, wd, "/Figures/DifferentialAbundance_", sample1, "_", sample2, "_ScatterPlot.jpeg"), res = 600, units = "in", height = 6, width = 7)
+# This will call data/plot
+scatter_S1S2 <- ggplot(data = TotFreqDF.wide_S1S2, aes(x = TotFreqDF.wide_S1S2[, sample1] + 0.001, y = TotFreqDF.wide_S1S2[, sample2] + 0.001)) + 
+   geom_point(size = 6, pch = 21, aes(fill = Diff))
+# use ggplot2 to refine plot
+scatter_S1S2 +
+   # Add line for exclusion (at least 5 reads in either sample)
+   ggplot2::geom_segment(aes(x=0.001, y=as.numeric(names(table(TotFreqDF.wide[, sample2])[6])), xend = as.numeric(names(table(TotFreqDF.wide[, sample1])[6])), yend = 0.001), col = "red", lty = 2) +
+   geom_abline(intercept = 0, slope = 1, col = "#CCCCCC", lty = 2) +
+   #ggplot2::scale_x_log10() + 
+   #ggplot2::scale_y_log10() + 
+   ggplot2::annotation_logticks(sides = "bl", scaled = FALSE) +
+   ylab(paste0(sample2, " Frequency (%)")) +
+   xlab(paste0(sample1, " Frequency (%)")) +
+   xlim(0.001, 100) + ylim(0.001, 100) +
+   coord_trans(x = "log10", y = "log10", limx = ) +
+   theme(panel.background = element_rect(fill = "white"), panel.grid=element_line(colour = "#CCCCCC"),
+         axis.text.x=element_text(angle=90, hjust =1)) +
+   scale_fill_manual(values = c("Loss" = "#87CEFF", "Gain" = "#FFC1C1", "Not Significant" = "#808080", "Excluded" = "#E0E0E0")) 
+
+
+dev.off()
+
+# Check nuber of DECs
+table(TotFreqDF.wide_S1S2$Diff)
+
+```
+
+```{r LymphoSeq: Differential Abundance}
+
+
+## DETERMINE DIFFERENTIAL ABUNDANCE ##
+
+NT.1.1_NT.1.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "NT.1.1", 
+                      sample2 = "NT.1.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+NT.1.2_NT.1.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "NT.1.2", 
+                      sample2 = "NT.1.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+
+NT.2.1_NT.2.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "NT.2.1", 
+                      sample2 = "NT.2.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+NT.2.2_NT.2.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "NT.2.2", 
+                      sample2 = "NT.2.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+NT.3.1_NT.3.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "NT.3.1", 
+                      sample2 = "NT.3.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+NT.3.2_NT.3.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "NT.3.2", 
+                      sample2 = "NT.3.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1.1.1_I_1.1.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1.1.1", 
+                      sample2 = "I_1.1.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1.1.2_I_1.1.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1.1.2", 
+                      sample2 = "I_1.1.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1.2.1_I_1.2.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1.2.1", 
+                      sample2 = "I_1.2.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1.2.2_I_1.2.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1.2.2", 
+                      sample2 = "I_1.2.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1.3.1_I_1.3.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1.3.1", 
+                      sample2 = "I_1.3.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1.3.2_I_1.3.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1.3.2", 
+                      sample2 = "I_1.3.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_2.1.1_I_2.1.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_2.1.1", 
+                      sample2 = "I_2.1.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_2.1.2_I_2.1.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_2.1.2", 
+                      sample2 = "I_2.1.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_2.2.1_I_2.2.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_2.2.1", 
+                      sample2 = "I_2.2.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_2.2.2_I_2.2.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_2.2.2", 
+                      sample2 = "I_2.2.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_2.3.1_I_2.3.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_2.3.1", 
+                      sample2 = "I_2.3.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_2.3.2_I_2.3.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_2.3.2", 
+                      sample2 = "I_2.3.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1F.1.1_I_1F.1.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1F.1.1", 
+                      sample2 = "I_1F.1.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1F.1.2_I_1F.1.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1F.1.2", 
+                      sample2 = "I_1F.1.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1F.2.1_I_1F.2.2 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1F.2.1", 
+                      sample2 = "I_1F.2.2", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+I_1F.2.2_I_1F.2.3 <- differentialAbundance(list = Sample.aa.list, 
+                      sample1 = "I_1F.2.2", 
+                      sample2 = "I_1F.2.3", 
+                      type = "aminoAcid", 
+                      q = 1,
+                      zero = 0.001)
+
+```
+
+
+
+
+```{r Differential Abundance Measures}
+
+library(openxlsx)
+# Pull table:
+DiffAbund.Table <- read.xlsx(paste0(mount, wd, "/Results/Ito_ISIM_TCRseq_Tables.xlsx"), sheet = 2)
+
+#
+library(stringr)
+DiffAbund.Table$Group <- unlist(lapply(strsplit(as.character(DiffAbund.Table$Group1), "-", fixed = TRUE), "[", 1))
+DiffAbund.Table$Group <- factor(DiffAbund.Table$Group, levels = c("NT", "I_1", "I_2", "I_1F"))
+#
+DiffAbund.Table$Replicate <- unlist(lapply(strsplit(as.character(DiffAbund.Table$Group1), "-", fixed = TRUE), "[", 2))
+DiffAbund.Table$Replicate <- str_extract(DiffAbund.Table$Replicate, pattern = "^.")
+   
+#
+DiffAbund.Table$Comparison <- paste(str_extract(DiffAbund.Table$Group1, pattern = ".$"), str_extract(DiffAbund.Table$Group2, pattern = ".$"), sep = "_")
+
+#
+DiffAbund.Table.melt <- melt(DiffAbund.Table)
+#
+for(i in unique(DiffAbund.Table.melt$variable)){
+# Plots
+ggplot(data = subset(DiffAbund.Table.melt, variable == i), aes(x = Group, y = value, fill = Group, color = Group)) +
+   #geom_line(aes(group = Replicate), color = "black", alpha = 0.1) +
+   geom_point() + 
+   geom_boxplot(alpha = 0.2) +
+   ylab(i) +
+   facet_grid(~Comparison) + 
+   theme(text=element_text(size = 20), legend.text=element_text(size = 20))
+ggsave(filename = paste0(mount, wd, "/Figures/DiffAbundMetrics_", i, ".jpeg"), dpi = 300, units = "in", height = 4, width = 10)
+}
+
+```
+
+
+
+
+
+
+
+
+```{r LymphoSeq: VDJ Gene Usage}
+
+
+### Assess V(D)J Gene Usage ###
+
+# Check VDJ usage frequencies, comparing all detectable clones in PBC 
+# PBC
+# Apply topSeqs, using the complete number of total clones
+top.seqs_PBC <- topSeqs(productive.seqs = Sample.nt.list_filter, top = 50)
+# Remove "TCRB" from gene family name
+top.seqs_PBC <- as.data.frame(apply(top.seqs_PBC, 2, function(x) gsub("TCRB", "", x)))
+# Generate chord diagram
+jpeg(filename = paste0(mount, wd, "/Figures/VDJ_ChordDiagram_Top50clones.jpeg"), height = 9, width = 9, res = 300, units = "in")
+# Plot Chord Diagram
+chordDiagramVDJ(sample = top.seqs_PBC, 
+                association = "VJ", 
+                colors = c("darkred", "navyblue", "green"))
+dev.off()
+
+
+
+
+
+## Determine VDJ gene usage in total detectable repertoires ##
+vGenes <- geneFreq(productive.nt = Sample.nt.list, locus = "V", family = TRUE)
+head(vGenes)
+
+#colnames(vGenes.Merged) <- c("familyName", "samples.PBC", "counts.PBC", "freq.PBC", "samples.CD4", "counts.CD4", "freq.CD4", "samples.CD8", "counts.CD8", "freq.CD8")
+# Some are unresolved (a few for Vgenes, a lot for Dgenes). Let's remove them.
+vGenes.Merged <- subset(vGenes.Merged, vGenes.Merged$familyName != "unresolved")
+
+# Generate heatmap
+library(reshape)
+vGenes.ForPlot <- reshape::cast(vGenes, familyName ~ samples, value = "frequencyGene", sum)
+rownames(vGenes.ForPlot) = as.character(vGenes.ForPlot$familyName)
+vGenes.ForPlot$familyName = NULL
+library(pheatmap)
+jpeg(filename = paste0(mount, wd, "/Figures/VDJ_Heatmap_TotalRepertoires_ALL.jpeg"), height = 10, width = 6, units = "in", res = 300)
+pheatmap::pheatmap(vGenes.ForPlot, 
+                   #color = RedBlue, 
+                   scale = "row",
+                   cluster_cols = FALSE,
+                   fontsize_row = 25, 
+                   fontsize_col = 25,
+                   labels_col = c("Germ1", "Germ2", "Tumor")
+                    )
+dev.off()
+
+
+
+```
+
+
+
+```{r filter clones}
+
+# Identify clones common to tumor (> 0.01%)
+commonAA <- c(intersect(rownames(TotFreqDF.wide)[TotFreqDF.wide$Germ1 > 0.01], rownames(TotFreqDF.wide)[TotFreqDF.wide$Tumor > 0.01]), intersect(rownames(TotFreqDF.wide)[TotFreqDF.wide$Germ2 > 0.01], rownames(TotFreqDF.wide)[TotFreqDF.wide$Tumor > 0.01]))
+commonAA <- unique(commonAA)
+length(commonAA)
+
+# Import immunoSEQ data for PBC samples
+Germ1.data <- read.table(paste0(mount, wd, "/Data/sampleExport.2019-05-29_10-21-26/Germ1.tsv"), sep = "\t", header = TRUE)
+Germ2.data <- read.table(paste0(mount, wd, "/Data/sampleExport.2019-05-29_10-21-26/PT-00317282-germline2.tsv"), sep = "\t", header = TRUE)
+
+# Subset files for only clones common with tumor
+Germ1.data_tumorFilter <- subset(Germ1.data, Germ1.data$aminoAcid %in% commonAA)
+Germ2.data_tumorFilter <- subset(Germ2.data, Germ2.data$aminoAcid %in% commonAA)
+# Subset files for only clones with > 5 reads
+Germ1.data_countFilter <- subset(Germ1.data, Germ1.data$count..templates.reads. > 5)
+Germ2.data_countFilter <- subset(Germ2.data, Germ2.data$count..templates.reads. > 5)
+
+# Save to file
+write_tsv(Germ1.data_tumorFilter, paste0(mount, wd, "/Data/Germ1.data_tumorFilter.tsv"))
+write_tsv(Germ2.data_tumorFilter, paste0(mount, wd, "/Data/Germ2.data_tumorFilter.tsv"))
+write_tsv(Germ1.data_countFilter, paste0(mount, wd, "/Data/Germ1.data_countFilter.tsv"))
+write_tsv(Germ2.data_countFilter, paste0(mount, wd, "/Data/Germ2.data_countFilter.tsv"))
+
+
+
+# 
+
+Germ1.TF <- Germ1.data_tumorFilter %>% select(aminoAcid, count..templates.reads.)
+Germ1.TF <- aggregate(Germ1.TF$count..templates.reads., by = list(Germ1.TF$aminoAcid), FUN = sum)
+colnames(Germ1.TF) <- c("aminoAcid", "Counts")
+Germ1.TF$SampleID <- "Germ1"
+Germ1.TF$Freq <- Germ1.TF$Counts / sum(Germ1.TF$Counts)
+   
+Germ2.TF <- Germ2.data_tumorFilter %>% select(aminoAcid, count..templates.reads.)
+Germ2.TF <- aggregate(Germ2.TF$count..templates.reads., by = list(Germ2.TF$aminoAcid), FUN = sum)
+colnames(Germ2.TF) <- c("aminoAcid", "Counts")
+Germ2.TF$SampleID <- "Germ2"
+Germ2.TF$Freq <- Germ2.TF$Counts / sum(Germ2.TF$Counts)
+
+Germ.TF <- merge(Germ1.TF, Germ2.TF, by = "aminoAcid", all.y = T)
+Germ.TF$DIFF <- Germ.TF$Freq.y - Germ.TF$Freq.x
+
+```
+
+
+
+
+
+```{r scoring matrices}
+
+# Using Biostrings package - tutorial: https://kasperdanielhansen.github.io/genbioconductor/html/Biostrings.html
+library(Biostrings)
+
+# Generate AAStringSet
+commonAA.aligned <- AlignSeqs(commonAA.stringset)
+
+# 
+BrowseSeqs(commonAA.aligned, highlight = 1)
+
+
+```
