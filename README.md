@@ -4,4 +4,4 @@ Data and associated code to perform TCR-seq analysis in manuscript "Overcoming p
 
 ### Data
 
-Contains TCR calls / frequency tables obtained from immunoSEQ ANALYZER software. 
+Contains TCR calls / frequency tables (*.tsv) obtained from immunoSEQ ANALYZER software. 
