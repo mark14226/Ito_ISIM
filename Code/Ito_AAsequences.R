@@ -33,7 +33,7 @@ TotCountDF.wide[is.na(TotCountDF.wide)] <- 0
 rownames(TotCountDF.wide) <- TotCountDF.wide$aminoAcid
 TotCountDF.wide$aminoAcid <- NULL
 # Save to file
-write.csv(TotCountDF.wide, paste0(mount, wd, "/Results/TotalRep_CountTable.csv"))
+write.csv(TotCountDF.wide, "TotalRep_CountTable.csv")
 
 
 # Filter for aa with certain coverage in at least 1 sample
@@ -41,17 +41,6 @@ write.csv(TotCountDF.wide, paste0(mount, wd, "/Results/TotalRep_CountTable.csv")
 coverage = 5
 # Consolidate 
 FilterCountDF.wide <- TotCountDF.wide[apply(TotCountDF.wide, 1, function(x) { max(x) >= 5 } ) ,]
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -76,7 +65,7 @@ TotFreqDF.wide[is.na(TotFreqDF.wide)] <- 0
 rownames(TotFreqDF.wide) <- TotFreqDF.wide$aminoAcid
 TotFreqDF.wide$aminoAcid <- NULL
 # Save to file
-write.csv(TotFreqDF.wide, paste0(mount, wd, "/Results/TotalRep_FrequencyTable.csv"))
+write.csv(TotFreqDF.wide, "TotalRep_FrequencyTable.csv")
 
 
 # Filter for aa with certain coverage in at least 1 sample
